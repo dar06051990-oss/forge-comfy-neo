@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "mode": "embedded",
+  "runtime_python": "",
+  "timeout_seconds": 900,
+  "extra_model_dirs": {
+    "diffusion_models": [],
+    "text_encoders": [],
+    "vae": [],
+    "loras": []
+  }
+}
