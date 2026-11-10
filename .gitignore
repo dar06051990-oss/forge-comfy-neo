@@ -1,0 +1,39 @@
+# Private session records, credentials and generated media
+.local/
+work/
+outputs/
+.env
+.env.*
+*.pem
+*.key
+
+# Python and tooling caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ruff_cache/
+.pytest_cache/
+.codegraph/
+
+# Local packages and model weights
+*.zip
+*.safetensors
+*.gguf
+
+# Forge Comfy Neo downloaded private runtime — never commit gigabytes of packages
+runtime/core/
+runtime/venv/
+runtime/python/
+runtime/python-bin/
+runtime/tools/
+runtime/cache/
+runtime/private_env_ready.json
+runtime/private_env_ready.stale*.json
+runtime/constraints_private.txt
+runtime/forge_comfy_neo_install.log
+runtime/*.log
+
+# Windows-generated artifacts
+*.bak
+*.tmp
