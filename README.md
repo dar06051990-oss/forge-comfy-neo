@@ -1,6 +1,6 @@
 # Forge Comfy Neo
 
-**v1.0.3 — first stable source release of the embedded ComfyUI backend for Forge Neo.**  Windows, NVIDIA CUDA.
+**Main branch: unreleased v1.0.4 development checkpoint (version label remains v1.0.3).** The v1.0.3 tag remains the previous stable release. Windows, NVIDIA CUDA.
 
 The project keeps the familiar Forge Neo txt2img/img2img interface and runs a **separate, private, headless ComfyUI** for the supported architectures. It does **not** replace your normal Forge pipeline, Python or PyTorch.
 
@@ -17,7 +17,8 @@ No BAT files or manual paths are needed for a fresh installation. Models are **n
 
 ## Using Comfy Neo
 
-- Preset **MiniMax H3**: video generation using the private ComfyUI worker.
+- Preset **MiniMax H3**: video generation using the private ComfyUI worker. Ref2VA supports up to three MP4 video references (24 FPS, 2–15 s, up to 96 MiB per file), individual reference soundtrack switches and up to three standalone audio references. Local Windows Explorer clipboard paste is supported.
+- **Pika H3 Flex** schedule: LCM, six steps, CFG 1, manual sigmas and the matching FL2VA/Ref2VA Pika H3 Flex LoRA from the Forge LoRA folder. The LoRAs are not bundled.
 - Preset **ANIMA**: txt2img, img2img / Edit, native `<lora:filename:weight>` tags through your existing Forge prompt tools, and experimental Sketch/Inpaint modes.
 - Existing Forge Sampler, Scheduler, Seed, prompt, Gallery and output workflows are reused. Preset settings are separate from ordinary Forge.
 - Runtime model unloading is **lazy**: merely browsing tabs/presets does not evict models; generating with the other engine handles VRAM hand-off.
@@ -33,19 +34,15 @@ received, **restart Forge** before using it.
 
 The separate private ComfyUI/PyTorch environment is **not** replaced by this
 Git operation. This is intentional: runtime upgrades need explicit compatible
-pins and migration logic, not a blind `pip install -U`. If a future extension
-release changes its required runtime, follow that release's migration guide
-rather than attempting to transplant or overwrite a live Windows `venv`.
+pins and migration logic, not a blind `pip install -U`. The current development checkpoint changes the required runtime. After updating the source and closing Forge, back up and remove this extension's old `runtime/core`, `runtime/venv` and `runtime/private_env_ready.json` before starting Forge and clicking **Install**. Restart Forge after installation. Do not change Forge's own environment. The existing runtime Python downloader, tools and cache can be retained.
 
-See [PUBLISHING.md](PUBLISHING.md) for a Git publishing and smoke-test checklist.
+### Runtime in the current main branch
 
-### Pinned runtime in v1.0.3
-
-- ComfyUI source: `bdb0816a292d221efeb6ec4ae41bcdff3f91fc86`
+- ComfyUI v0.46.0 source: `a277b5bf213e8a44fa34817b7770b54f86ef4cea`
 - Private Python: **3.13.18** (managed by `uv`)
-- Private PyTorch: **2.11.0 + CUDA 13.0**, torchvision **0.26.0**
+- Private PyTorch: stable CUDA 13.0 (`cu130`) wheels from the official PyTorch index, including torchvision and torchaudio. The reported working installation resolved torch **2.14.1+cu130**, torchvision **0.29.1+cu130**, torchaudio **2.11.0+cu130**; subsequent installations may resolve newer compatible versions.
 - `uv`: **0.13.7**, official binary with SHA-256 validation
-- Additional dependencies are installed from the pinned ComfyUI source requirements; torch and torchvision are constrained to the versions above.
+- Additional dependencies are installed from the pinned ComfyUI requirements. Resolved CUDA package versions are constrained and checked to prevent their replacement during dependency installation.
 
 The exact ComfyUI source is pinned by commit, and the package installer prints its steps in `runtime/forge_comfy_neo_install.log`. A GitHub-provided source tarball is downloaded over HTTPS; unlike `uv`, it is not currently verified against an independently pinned tarball checksum.
 
@@ -67,6 +64,6 @@ The base extension includes code derived from Forge Neo and its upstream compone
 
 ## Validation and known limitations
 
-This stable source release is the **same generation, worker-management and installer implementation as v1.0.3 RC2**. It promotes the version after reported real-world validation on Windows: a clean installation, generation, no extra console window and owned process cleanup on Forge exit. The independent offline source test suite also passes; see [SOURCE_AUDIT.md](SOURCE_AUDIT.md).
+The original v1.0.3 stable release was validated separately; its historical audit is in [SOURCE_AUDIT.md](SOURCE_AUDIT.md). The current main branch is a newer development checkpoint with user-reported working installation and generation. It has not been promoted to a new stable release. H3 Image and automatic download-cache cleanup are not implemented in this checkpoint.
 
-This does not guarantee every model, extension combination or experimental img2img/Sketch/Inpaint mode. No runtime pins or model files were changed for the stable release. To avoid conflicting Forge callbacks, do not enable this extension alongside the former Comfy Engine/ComfyMax extension.
+This does not guarantee every model, extension combination or experimental img2img/Sketch/Inpaint mode. To avoid conflicting Forge callbacks, do not enable this extension alongside the former Comfy Engine/ComfyMax extension.

@@ -92,6 +92,8 @@ def settings():
         samplers, schedulers = available_choices()
     except (OSError, SyntaxError, ValueError):
         samplers, schedulers = ['res_multistep', 'euler', 'er_sde'], ['simple', 'beta']
+    from forge_h3.comfy_sampler_ui import h3_choices, PIKA_LABEL, PIKA_SCHEDULE
+    samplers, schedulers = h3_choices(samplers, schedulers)
     for suffix, entries, convert in (
         ('sampler', samplers, normalized_sampler),
         ('scheduler', schedulers, normalized_scheduler),
@@ -100,7 +102,7 @@ def settings():
             key = f'h3_{mode}_{suffix}'
             info = shared.opts.data_labels.get(key)
             if info is not None:
-                info.component_args = lambda values=entries: {'choices': list(values), 'allow_custom_value': False}
+                info.component_args = lambda values=entries: {'choices': [(PIKA_LABEL, x) if x == PIKA_SCHEDULE else (x, x) for x in values], 'allow_custom_value': False}
                 original = shared.opts.data.get(key, info.default)
                 normalized = convert(original)
                 fallback = 'res_multistep' if suffix == 'sampler' else 'simple'

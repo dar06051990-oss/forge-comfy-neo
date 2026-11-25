@@ -128,6 +128,18 @@ class Panel:
         steps_c = COMPONENTS[f"{self.tab}_steps"]
         resize_mode_c = COMPONENTS['resize_mode'] if self.is_img2img else gr.State(1)
         denoise_c = COMPONENTS['img2img_denoising_strength'] if self.is_img2img else gr.State(1.0)
+        # Real controls created by the Video Reference always-on script beside
+        # ImageStitch (not a duplicate uploader inside the H3 accordion).
+        from . import video_reference
+        ref_controls = video_reference.get_controls(self.tab)
+        if ref_controls is None:
+            logger.warning('Video Reference controls not found for %s; starting without video input.', self.tab)
+            ref_controls = (gr.State(False), *(c for _ in range(3) for c in (gr.State(None), gr.State(False))))
+        audio_controls = video_reference.get_audio_controls(self.tab)
+        if audio_controls is None:
+            logger.warning("Audio Reference controls not found for %s.", self.tab)
+            audio_controls = (gr.State(False), *(gr.State(None) for _ in range(3)))
+        ref_enabled, *ref_media = (*ref_controls, *audio_controls)
         defaults = [{key: getattr(c, key) for key in ("minimum", "maximum", "step", "label", "visible", "choices", "interactive")
                      if hasattr(c, key)} for c in native]
         preset_input = [preset] if preset is not None else []
@@ -167,8 +179,8 @@ class Panel:
                     # H3 preset values are now native Comfy KSampler/BasicScheduler
                     # identifiers; reflect user-saved preset choices where available.
                     from modules import shared
-                    from .comfy_sampler_ui import available_choices, normalized_sampler, normalized_scheduler
-                    samplers, schedulers = available_choices()
+                    from .comfy_sampler_ui import available_choices, normalized_sampler, normalized_scheduler, h3_choices
+                    samplers, schedulers = h3_choices(*available_choices())
                     mode = 'i2i' if self.is_img2img else 't2i'
                     requested_sampler = normalized_sampler(getattr(shared.opts, f'h3_{mode}_sampler', 'res_multistep'))
                     requested_scheduler = normalized_scheduler(getattr(shared.opts, f'h3_{mode}_scheduler', 'simple'))
@@ -209,13 +221,25 @@ class Panel:
 
         for event in (checkpoint.change, self.output.change, modules.change):
             event(update, inputs=inputs, outputs=outputs, queue=False, show_progress=False)
+        from .comfy_sampler_ui import normalized_scheduler, PIKA_SCHEDULE
+
+        def pika_controls(schedule, current_preset):
+            if current_preset == 'h3' and normalized_scheduler(schedule) == PIKA_SCHEDULE:
+                return gr.update(value='lcm'), gr.update(value=6), gr.update(value=1.0)
+            return gr.update(), gr.update(), gr.update()
+
+        if preset is not None:
+            native[3].change(pika_controls, inputs=[native[3], preset],
+                             outputs=[native[2], steps_c, native[4]],
+                             queue=False, show_progress=False)
         # Frame changes update duration without overwriting any other native controls.
         native[0].change(lambda n, output: gr.update(value=f"{int(n)} frames / {FPS} FPS = {int(n) / FPS:.2f} seconds"),
                          inputs=[native[0], self.output], outputs=[duration], queue=False, show_progress=False)
         gr.context.Context.root_block.load(update, inputs=inputs, outputs=outputs, queue=False, show_progress=False)
         def comfy_run(prompt, width, height, frames, seed, steps, ckpt, mods, media_json,
                       negative='', cfg=4.0, sampler='er_sde', scheduler='simple',
-                      resize_mode=1, denoise=1.0):
+                      resize_mode=1, denoise=1.0,
+                      reference_enabled=False, *reference_media):
             import time
             try:
                 import json
@@ -251,6 +275,8 @@ class Panel:
                     return (gr.update(value=None, visible=False),
                             gr.update(value=img, visible=True), img,
                             f"done-image|{time.time_ns()}|{img}")
+                if scheduler == PIKA_SCHEDULE:
+                    steps, cfg = 6, 1.0
                 from .comfy_full_backend import activate_session, generate
                 # Lazy hand-off: unload any native Forge checkpoint only once
                 # the user actually requests a MiniMax generation.
@@ -258,7 +284,9 @@ class Panel:
                 info = checkpoint_info(ckpt)
                 ckpt_path = info.filename if info is not None else ckpt
                 path = generate(prompt, width, height, frames, seed, steps, ckpt_path, mods, media_json,
-                                sampler=sampler, scheduler=scheduler)
+                                sampler=sampler, scheduler=scheduler,
+                                reference_videos=list(zip(reference_media[:6:2], reference_media[1:6:2])) if reference_enabled else [],
+                                reference_audios=list(reference_media[7:10]) if len(reference_media) > 6 and reference_media[6] else [])
                 if not path:
                     return (gr.update(value=None, visible=False),
                             gr.update(value=None, visible=False), None,
@@ -283,7 +311,8 @@ class Panel:
         self.comfy_generate.click(comfy_run,
             inputs=[prompt_c, width_c, height_c, native[0], seed_c, steps_c,
                     checkpoint, modules, self.comfy_images, negative_c,
-                    native[4], native[2], native[3], resize_mode_c, denoise_c],
+                    native[4], native[2], native[3], resize_mode_c, denoise_c,
+                    ref_enabled, *ref_media],
             outputs=[self.comfy_video, self.comfy_image, self.download, self.comfy_state],
             show_progress=True)
         self.bound = True

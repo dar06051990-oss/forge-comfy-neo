@@ -1,5 +1,7 @@
 # Source and compatibility audit — v1.0.3 stable
 
+> Historical audit of the original v1.0.3 tagged source. The unreleased main branch contains later source and runtime changes; the checksums and test results below do not describe that newer checkpoint.
+
 Source baseline: user-provided `comfymax-h3-neo-embedded-dev01.zip`, with the final
 DEV33 patch applied (`forge_h3/ui.py` and `scripts/comfy_engine_tab.py` match
 `Comfy-Engine-DEV33-LAZY-UNLOAD-ON-GENERATE.zip`).

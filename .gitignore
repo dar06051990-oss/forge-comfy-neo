@@ -37,3 +37,10 @@ runtime/*.log
 # Windows-generated artifacts
 *.bak
 *.tmp
+
+# Local runtime configuration and temporary patch artifacts
+runtime/extra_model_paths.yaml
+runtime_recipe_backup_*/
+APPLY_RUNTIME_PATCH.bat
+apply_runtime_patch.py
+README-*-TEST.txt

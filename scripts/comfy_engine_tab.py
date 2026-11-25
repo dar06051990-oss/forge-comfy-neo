@@ -160,9 +160,12 @@ def _apply_sampler_lists(preset_value, updates, originals, shared):
         # Both engines use the actual ComfyUI identifiers; H3 used to
         # display Forge's title-case labels even though they were ignored.
         from forge_h3.comfy_sampler_ui import normalized_sampler, normalized_scheduler
+        from forge_h3.comfy_sampler_ui import h3_choices, PIKA_SCHEDULE, PIKA_LABEL
+        if preset_value == 'h3':
+            samplers, schedulers = h3_choices(samplers, schedulers)
         key_prefix = preset_value
         choice_s = [(name, name) for name in samplers]
-        choice_c = [(name, name) for name in schedulers]
+        choice_c = [(PIKA_LABEL if name == PIKA_SCHEDULE else name, name) for name in schedulers]
         for idx, choices, suffix in (
             (6, choice_s, 't2i_sampler'),
             (7, choice_s, 'i2i_sampler'),
@@ -178,6 +181,12 @@ def _apply_sampler_lists(preset_value, updates, originals, shared):
                 wanted = fallback if fallback in allowed else choices[0][1]
                 print('[Comfy Neo] Invalid preset %s; using %s' % (setting, wanted))
             updates[idx] = gr.update(choices=choices, value=wanted)
+        if preset_value == 'h3':
+            for scheduler_idx, sampler_idx, steps_idx, cfg_idx in ((8, 6, 3, 14), (9, 7, 5, 16)):
+                if updates[scheduler_idx].get('value') == PIKA_SCHEDULE:
+                    updates[sampler_idx] = gr.update(choices=choice_s, value='lcm')
+                    updates[steps_idx] = gr.update(value=6)
+                    updates[cfg_idx] = gr.update(value=1.0)
     else:
         for idx in (6, 7, 8, 9):
             # The native callback knows the correct value for the selected Forge
@@ -244,14 +253,15 @@ def _bind_preset_navigation():
     # Clicking a preset within the same Comfy Neo tab also needs to swap
     # Dropdown choices, not just the Forge-prescribed values. The existing
     # native on_preset_change callback retains ownership of other widgets.
-    sampler_outputs = [controls[i] for i in (6, 7, 8, 9)]
+    sampling_indices = (6, 7, 8, 9, 3, 5, 14, 16)
+    sampler_outputs = [controls[i] for i in sampling_indices]
     def on_manual_selection(value, saved):
         next_state = dict(saved or {})
         if next_state.get('engine') == 'comfy' and value in COMFY_PRESETS:
             next_state['comfy'] = value
         native = main_entry.on_preset_change(value)
         values = _apply_sampler_lists(value, native, original_choices, shared)
-        return [values[i] for i in (6, 7, 8, 9)] + [next_state]
+        return [values[i] if i in (6, 7, 8, 9) or value == 'h3' else gr.update() for i in sampling_indices] + [next_state]
 
     preset.change(fn=on_manual_selection, inputs=[preset, memory],
                   outputs=sampler_outputs + [memory],

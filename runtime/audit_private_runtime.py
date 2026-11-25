@@ -17,7 +17,7 @@ CORE=RUNTIME/'core'
 PRIVATE=RUNTIME/'venv'
 CONF=EXT/'comfy_bridge.json'
 PACKAGES={
- 'torch':'torch', 'torchvision':'torchvision',
+ 'torch':'torch', 'torchvision':'torchvision', 'torchaudio':'torchaudio',
  'comfy_kitchen':'comfy-kitchen', 'comfy_aimdo':'comfy-aimdo',
  'safetensors':'safetensors', 'transformers':'transformers',
  'aiohttp':'aiohttp','av':'av','yaml':'PyYAML',
@@ -37,6 +37,8 @@ def check():
  good &= stat('GPLv3 license in bundled core', (CORE/'LICENSE').is_file())
  good &= stat('Standard Comfy execution', (CORE/'execution.py').is_file())
  good &= stat('MiniMax H3 nodes', (CORE/'comfy_extras'/'nodes_minimax_h3.py').is_file())
+ nodes=CORE/'comfy_extras'/'nodes_minimax_h3.py'
+ good &= stat('H3 Image conditioning', nodes.is_file() and 'class MiniMaxH3ImageConditioning(' in nodes.read_text(encoding='utf-8'))
  good &= stat('MiniMax H3 architecture', (CORE/'comfy'/'ldm'/'minimax'/'model.py').is_file())
  try:
   c=json.loads(CONF.read_text(encoding='utf-8'))
@@ -68,7 +70,8 @@ def check():
    good &= stat(module,False,str(e))
  try:
   import torch
-  good &= stat('PyTorch 2.11.0',torch.__version__.startswith('2.11.0'),torch.__version__)
+  expected=json.loads(marker.read_text(encoding='utf-8'))['torch']
+  good &= stat('PyTorch CUDA build',torch.__version__==expected and expected.endswith('+cu130'),torch.__version__)
   good &= stat('CUDA 13.0',torch.version.cuda=='13.0',str(torch.version.cuda))
   good &= stat('CUDA available',torch.cuda.is_available())
   if torch.cuda.is_available():print('GPU:',torch.cuda.get_device_name(0))

@@ -13,7 +13,7 @@ ROOT=RUNTIME.parent
 CORE=RUNTIME/'core'
 VENV_PYTHON=RUNTIME/'venv'/'Scripts'/'python.exe'
 MARKER=RUNTIME/'private_env_ready.json'
-PINNED='bdb0816a292d221efeb6ec4ae41bcdff3f91fc86'
+PINNED='a277b5bf213e8a44fa34817b7770b54f86ef4cea'
 
 def run(args):
     cmd=[str(x) for x in args]

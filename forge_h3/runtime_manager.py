@@ -22,8 +22,8 @@ PRIVATE_PYTHON = RUNTIME / 'venv' / 'Scripts' / 'python.exe'
 CORE = RUNTIME / 'core'
 INSTALLER = RUNTIME / 'setup_complete.py'
 GIT_UPDATER = RUNTIME / 'update_from_git.py'
-COMFY_PIN = 'bdb0816a292d221efeb6ec4ae41bcdff3f91fc86'
-TORCH_PIN = '2.11.0'
+COMFY_PIN = 'a277b5bf213e8a44fa34817b7770b54f86ef4cea'
+TORCH_INDEX = 'https://download.pytorch.org/whl/cu130'
 
 _lock = threading.RLock()
 _process = None
@@ -45,7 +45,7 @@ def runtime_state():
             return False, 'Private Python path changed (runtime cannot be moved as a plain folder).'
         if marker.get('comfy_source') != COMFY_PIN:
             return False, 'ComfyUI source differs from the pinned release.'
-        if marker.get('torch') != TORCH_PIN or marker.get('torch_cuda') != '13.0':
+        if not marker.get('torch') or marker.get('torch_cuda') != '13.0':
             return False, 'PyTorch/CUDA version differs from the pinned release.'
     except (ValueError, KeyError, TypeError, OSError, json.JSONDecodeError) as exc:
         return False, f'Runtime marker is invalid: {exc}'
@@ -133,7 +133,7 @@ def start(action: str, request=None):
         _completed = None
         LOG.write_text('Forge Comfy Neo v1.0.3 — ' + _action + '\n'
                        'ComfyUI pinned commit: ' + COMFY_PIN + '\n'
-                       'Torch pinned version: ' + TORCH_PIN + ' (cu130)\n', encoding='utf-8')
+                       'Torch source: ' + TORCH_INDEX + ' (stable)\n', encoding='utf-8')
         try:
             stream = LOG.open('ab', buffering=0)
             try:

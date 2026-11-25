@@ -1,3 +1,12 @@
+## Unreleased — v1.0.4 development checkpoint (2026-11-25)
+
+- Add three Ref2VA video reference slots with compact thumbnails, independent soundtrack toggles and local Windows Explorer clipboard paste.
+- Add a separate Audio Reference script for up to three audio files; stage decoded audio in the private Comfy input directory and clean up staged references after generation.
+- Add the Pika H3 Flex schedule option (LCM, six steps, CFG 1, manual sigmas and mode-specific LoRA selection).
+- Pin the embedded ComfyUI source to v0.46.0 (`a277b5bf213e8a44fa34817b7770b54f86ef4cea`).
+- Install stable Windows CUDA 13.0 torch/torchvision/torchaudio wheels from the official PyTorch index, constrain the resolved versions while installing core requirements and verify the installed CUDA build. The tested install resolved torch 2.14.1+cu130.
+- Snapshot the user-tested source without local runtime data. The H3 Image preset and automatic download-cache cleanup are not included yet. No new tagged release.
+
 ## v1.0.3 (stable source release, 2026-11-10)
 
 - Promoted the **same tested v1.0.3 RC2 implementation** to the first stable Git source package after confirmation of clean Windows installation, generation and correct shutdown of owned processes.

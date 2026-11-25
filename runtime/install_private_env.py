@@ -31,8 +31,7 @@ UV_URLS = (
     f'https://releases.astral.sh/github/uv/releases/download/{UV_VERSION}/uv-x86_64-pc-windows-msvc.zip',
 )
 TORCH_INDEX = 'https://download.pytorch.org/whl/cu130'
-TORCH = '2.11.0'
-TORCHVISION = '0.26.0'
+TORCH_PACKAGES = ('torch', 'torchvision', 'torchaudio')
 
 
 def run(*args, env=None):
@@ -91,7 +90,7 @@ def main():
     print('==============================================================', flush=True)
     print('Runtime folder:', RUNTIME, flush=True)
     print('Private Python:', ENV_PYTHON, flush=True)
-    print('PyTorch:', TORCH, 'CUDA 13.0', flush=True)
+    print('PyTorch: latest stable from', TORCH_INDEX, flush=True)
     print('Large downloads required. No model weights are downloaded.', flush=True)
     if MARKER.exists():
         MARKER.unlink()  # prevent use of half-updated installs
@@ -115,21 +114,25 @@ def main():
 
     # Install the explicitly selected official Windows CUDA wheel first.
     run(UV_EXE, 'pip', 'install', '--python', ENV_PYTHON,
-        f'torch=={TORCH}', f'torchvision=={TORCHVISION}',
+        *TORCH_PACKAGES,
         '--index-url', TORCH_INDEX, env=env)
 
     # The official source requirements include an unpinned torch and torchvision.
     # Pass explicit constraints so they cannot silently replace CUDA PyTorch.
     constraints = RUNTIME / 'constraints_private.txt'
-    constraints.write_text(f'torch=={TORCH}\ntorchvision=={TORCHVISION}\n', encoding='utf-8')
+    version_code = 'import importlib.metadata as m, json; print(json.dumps({p:m.version(p) for p in ("torch","torchvision","torchaudio")}))'
+    versions = json.loads(subprocess.check_output([str(ENV_PYTHON), '-c', version_code], cwd=str(ROOT), env=env, text=True))
+    if any(not v.endswith('+cu130') for v in versions.values()):
+        raise RuntimeError(f'Expected CUDA 13.0 wheels: {versions}')
+    constraints.write_text(''.join(f'{p}=={v}\n' for p,v in versions.items()), encoding='utf-8')
     run(UV_EXE, 'pip', 'install', '--python', ENV_PYTHON,
         '-r', CORE / 'requirements.txt', '-c', constraints,
-        '--index-url', 'https://pypi.org/simple', env=env)
+        '--index-url', 'https://pypi.org/simple', '--extra-index-url', TORCH_INDEX, env=env)
     run(UV_EXE, 'pip', 'check', '--python', ENV_PYTHON, env=env)
 
     smoke = r'''
 import importlib, sys, torch, pathlib
-required = ('torch', 'torchvision', 'comfy_aimdo', 'comfy_kitchen', 'aiohttp',
+required = ('torch', 'torchvision', 'torchaudio', 'comfy_aimdo', 'comfy_kitchen', 'aiohttp',
  'av','yaml','safetensors','transformers','tokenizers','sentencepiece','einops',
  'psutil','PIL','comfyui_frontend_package')
 for name in required:
@@ -138,16 +141,19 @@ print('Python:',sys.executable)
 print('Torch:',torch.__version__, 'CUDA:',torch.version.cuda)
 print('GPU:',torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NOT AVAILABLE')
 assert sys.version_info[:2] == (3, 13)
-assert torch.__version__.startswith('2.11.0'), 'Incorrect PyTorch version'
+assert torch.__version__.endswith('+cu130'), 'Incorrect PyTorch build'
 assert torch.version.cuda == '13.0', 'Incorrect PyTorch CUDA build (CPU wheel?)'
 assert torch.cuda.is_available(), 'CUDA GPU not available'
 '''
     run(ENV_PYTHON, '-c', smoke, env=env)
+    verified = json.loads(subprocess.check_output([str(ENV_PYTHON), '-c', version_code], cwd=str(ROOT), env=env, text=True))
+    if verified != versions:
+        raise RuntimeError(f'CUDA package versions changed: {verified}')
     MARKER.write_text(json.dumps({
         'runtime': 'Forge Comfy Neo private Python',
         'python': str(ENV_PYTHON),
         'python_version': '3.13',
-        'torch': TORCH, 'torch_cuda': '13.0', 'comfy_source': 'bdb0816a292d221efeb6ec4ae41bcdff3f91fc86',
+        'torch': versions['torch'], 'torchvision': versions['torchvision'], 'torchaudio': versions['torchaudio'], 'torch_cuda': '13.0', 'comfy_source': 'a277b5bf213e8a44fa34817b7770b54f86ef4cea',
         'uv': UV_VERSION
     }, indent=2), encoding='utf-8')
     print('\n[OK] Private Comfy Python is installed and CUDA verified.', flush=True)

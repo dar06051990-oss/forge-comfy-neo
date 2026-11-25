@@ -13,6 +13,22 @@ SOURCE = Path(__file__).resolve().parents[1] / 'runtime' / 'core' / 'comfy' / 's
 # These are supported by the pinned Comfy version, not unsupported Forge extras.
 FALLBACK_SAMPLERS = ('euler', 'euler_ancestral', 'heun', 'dpmpp_2m', 'dpmpp_sde',
                      'res_multistep', 'er_sde', 'ddim', 'uni_pc')
+PIKA_SCHEDULE = 'pika_h3_flex'
+PIKA_LABEL = 'Pika H3 Flex'
+PIKA_SIGMAS = '1.0, 0.972973, 0.923077, 0.8, 0.571429, 0.333333, 0.0'
+PIKA_STEPS = 6
+
+
+def h3_choices(samplers, schedulers):
+    return list(dict.fromkeys([*samplers, 'lcm'])), list(dict.fromkeys([*schedulers, PIKA_SCHEDULE]))
+
+
+def pika_lora_name(mode):
+    if mode not in ('fl2va', 'ref2va'):
+        raise ValueError(f'Unsupported Pika H3 mode: {mode}')
+    return f'pika_h3_flex_{mode}_v1_bf16.safetensors'
+
+
 FALLBACK_SCHEDULERS = ('simple', 'normal', 'karras', 'exponential', 'beta')
 
 
@@ -84,6 +100,8 @@ def resolve_forge_sampling(sampler, scheduler, *, preset, mode, opts):
     if preset not in ('h3', 'comfy_anima') or mode not in ('t2i', 'i2i'):
         raise ValueError('Unknown Comfy Neo preset or generation mode')
     supported_samplers, supported_schedulers = available_choices()
+    if preset == 'h3':
+        supported_samplers, supported_schedulers = h3_choices(supported_samplers, supported_schedulers)
     default_sampler = 'er_sde' if preset == 'comfy_anima' else 'res_multistep'
     default_scheduler = 'beta' if preset == 'comfy_anima' else 'simple'
 
@@ -100,4 +118,17 @@ def resolve_forge_sampling(sampler, scheduler, *, preset, mode, opts):
     if normalized_scheduler(scheduler) == 'use_same_scheduler':
         scheduler = preset_value('scheduler', default_scheduler, normalized_scheduler, supported_schedulers)
         print(f'[Comfy Neo] Forge Hires scheduler sentinel resolved to {scheduler!r} ({preset}/{mode})')
+    if normalized_scheduler(scheduler) == PIKA_SCHEDULE:
+        if preset != 'h3':
+            raise ValueError('Pika H3 Flex is only available for MiniMax H3.')
+        return 'lcm', PIKA_SCHEDULE
     return validate(sampler, scheduler)
+
+
+def apply_pika_schedule(graph):
+    """Replace the compiled BasicScheduler, retaining its existing output link."""
+    if graph.get('105:9', {}).get('class_type') != 'BasicScheduler' or graph.get('105:17', {}).get('class_type') != 'KSamplerSelect':
+        raise RuntimeError('Pika H3 Flex: expected sampler nodes missing')
+    graph['105:9'] = {'class_type': 'ManualSigmas', 'inputs': {'sigmas': PIKA_SIGMAS}}
+    graph['105:17']['inputs']['sampler_name'] = 'lcm'
+    return graph

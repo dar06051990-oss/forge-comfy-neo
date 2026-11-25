@@ -11,13 +11,13 @@ import tempfile
 import urllib.request
 import shutil
 
-COMFY_COMMIT = 'bdb0816a292d221efeb6ec4ae41bcdff3f91fc86'
+COMFY_COMMIT = 'a277b5bf213e8a44fa34817b7770b54f86ef4cea'
 SRC_URL = f'https://github.com/Comfy-Org/ComfyUI/archive/{COMFY_COMMIT}.tar.gz'
 HERE = Path(__file__).resolve().parent
 CORE = HERE / 'core'
 
 BACKEND_DIRS = (
-    'app/', 'api_server/', 'blueprints/', 'comfy/', 'comfy_api/',
+    'app/', 'api_server/', 'blueprints/', 'alembic_db/', 'comfy/', 'comfy_api/',
     'comfy_config/', 'comfy_execution/', 'comfy_extras/',
     'middleware/', 'utils/',
 )
@@ -25,7 +25,7 @@ BACKEND_FILES = {
     'main.py','nodes.py','server.py','execution.py','folder_paths.py',
     'node_helpers.py','protocol.py','cuda_malloc.py','latent_preview.py',
     'hook_breaker_ac10a0.py','comfyui_version.py','requirements.txt',
-    'openapi.yaml','LICENSE',
+    'openapi.yaml','LICENSE','alembic.ini','default_workflow.json',
 }
 
 

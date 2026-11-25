@@ -1,5 +1,5 @@
 """MiniMax H3 backend with isolated headless ComfyUI runtime (DEV07)."""
-import atexit, base64, copy, json, os, socket, subprocess, threading, time, urllib.request, urllib.error, urllib.parse, uuid, secrets, queue, sys
+import atexit, base64, copy, json, os, socket, subprocess, threading, time, urllib.request, urllib.error, urllib.parse, uuid, secrets, queue, sys, shutil
 from pathlib import Path
 from .hidden_subprocess import hidden_windows_kwargs
 from .windows_job import WindowsKillJob
@@ -413,8 +413,8 @@ def _cfg():
             marker_python = Path(ready['python'])
             if marker_python.resolve() != private_python.resolve():
                 raise ValueError('runtime moved after install; reinstall private environment')
-            if (ready.get('torch') != '2.11.0' or ready.get('torch_cuda') != '13.0'
-                    or ready.get('comfy_source') != 'bdb0816a292d221efeb6ec4ae41bcdff3f91fc86'):
+            if (not ready.get('torch') or ready.get('torch_cuda') != '13.0'
+                    or ready.get('comfy_source') != 'a277b5bf213e8a44fa34817b7770b54f86ef4cea'):
                 raise ValueError('unexpected private runtime version')
         except Exception as exc:
             raise RuntimeError(
@@ -1043,6 +1043,105 @@ def _add_load_image_nodes(graph, images, prefix='h3_load'):
     return refs
 
 
+# Ref2VA reference-video trial for the original DEV33 constructor. Keep media isolated from image references and
+# leave the existing H3/ANIMA workflow untouched unless an MP4 was selected.
+MAX_REFERENCE_VIDEO_BYTES = 96 * 1024 * 1024
+
+
+def _reference_upload_path(upload):
+    """Validate the Gradio upload path before copying to *our* Comfy input."""
+    if not upload:
+        return None
+    if isinstance(upload, dict):
+        upload = upload.get('path') or upload.get('name')
+    elif not isinstance(upload, (str, os.PathLike)):
+        upload = getattr(upload, 'name', None)
+    if not isinstance(upload, (str, os.PathLike)) or not str(upload):
+        raise ValueError('Ref2VA: select an MP4 using the Reference Video upload control.')
+    source = Path(upload)
+    if source.is_symlink() or not source.is_file() or source.suffix.lower() != '.mp4':
+        raise ValueError('Ref2VA: uploaded reference video must be a regular MP4 file.')
+    size = source.stat().st_size
+    if size < 1024 or size > MAX_REFERENCE_VIDEO_BYTES:
+        raise ValueError('Ref2VA: MP4 must be between 1 KiB and 96 MiB for this first test.')
+    return source
+
+
+def _probe_reference_video(source):
+    """Inspect in the private Comfy Python (which already has PyAV installed).
+
+    We intentionally reject other frame rates in the first test: the native
+    MiniMax node assumes that reference frame batches are already 24 FPS.
+    """
+    python = Path(_cfg()['comfy_python'])
+    script = ROOT / 'runtime' / 'probe_ref_video.py'
+    proc = subprocess.run([str(python), str(script), str(source)],
+                          text=True, capture_output=True, timeout=25,
+                          creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0)
+    if proc.returncode:
+        raise ValueError('Ref2VA: cannot read reference MP4: '
+                         + (proc.stderr.strip() or proc.stdout.strip() or 'unknown error')[:500])
+    try:
+        info = json.loads(proc.stdout.strip())
+        fps = float(info['fps'])
+        duration = float(info['duration'])
+    except (ValueError, KeyError, TypeError) as exc:
+        raise ValueError('Ref2VA: cannot determine reference video FPS and duration.') from exc
+    if not 23.94 <= fps <= 24.06:
+        raise ValueError(f'Ref2VA: the first test supports only 24 FPS MP4; got {fps:.3f}. '
+                         'Convert the source to 24 FPS or use another clip.')
+    if not 2.0 <= duration <= 15.25:
+        raise ValueError(f'Ref2VA: the first test supports 2–15 second clips; got {duration:.2f}s.')
+    return info
+
+
+def _attach_reference_video(graph, upload, frames, use_reference_audio=False, slot=0):
+    """Load one reference as IMAGE frames using official Comfy core video nodes.
+
+    Returns the private staged file to be deleted when the generation ends.
+    Connect the matching audio slot only when requested and audio exists.
+    """
+    if not 0 <= slot < 3:
+        raise ValueError('Ref2VA: at most three reference videos are supported.')
+    source = _reference_upload_path(upload)
+    if source is None:
+        return None
+    if graph.get('105:128', {}).get('class_type') != 'MiniMaxH3ReferenceToVideo':
+        raise ValueError('Ref2VA: reference video selected, but no Ref2VA node exists.')
+    info = _probe_reference_video(source)
+    input_dir = Path(_cfg()['comfy_root']) / 'input'
+    input_dir.mkdir(parents=True, exist_ok=True)
+    name = 'comfyneo_ref_video_' + uuid.uuid4().hex + '.mp4'
+    staged = input_dir / name
+    try:
+        shutil.copyfile(source, staged)
+        # Slice before decoding to avoid allocating frames beyond the generation
+        # length. A 24 FPS batch is what MiniMaxH3ReferenceToVideo expects.
+        graph[f'h3_refvideo_load_{slot}'] = {'class_type': 'LoadVideo', 'inputs': {'file': name}}
+        graph[f'h3_refvideo_slice_{slot}'] = {
+            'class_type': 'Video Slice',
+            'inputs': {'video': [f'h3_refvideo_load_{slot}', 0], 'start_time': 0.0,
+                       'duration': min(float(frames) / 24.0, 15.0), 'strict_duration': False},
+        }
+        graph[f'h3_refvideo_frames_{slot}'] = {
+            'class_type': 'GetVideoComponents',
+            'inputs': {'video': [f'h3_refvideo_slice_{slot}', 0]},
+        }
+        graph['105:128']['inputs'][f'ref_videos.ref_video_{slot}'] = [f'h3_refvideo_frames_{slot}', 0]
+        has_soundtrack = bool(info.get('has_audio'))
+        if use_reference_audio and has_soundtrack:
+            graph['105:128']['inputs'][f'ref_video_audios.ref_video_audio_{slot}'] = [f'h3_refvideo_frames_{slot}', 1]
+        else:
+            graph['105:128']['inputs'].pop(f'ref_video_audios.ref_video_audio_{slot}', None)
+        print(f'[Comfy Neo Ref2VA] MP4 video reference {slot + 1}: {source.name} '
+              f'({info["fps"]:.2f} FPS, {info["duration"]:.2f}s); '
+              f'frames connected; reference soundtrack '
+              f'{"enabled" if use_reference_audio and has_soundtrack else "disabled / absent"}.', flush=True)
+        return staged
+    except Exception:
+        staged.unlink(missing_ok=True)
+        raise
+
 def _activate_fl2va_graph(graph, prompt, width, height, frames, first_image=None, last_image=None):
     if '105:104' not in graph:
         raise RuntimeError('FL2VA API template is missing MiniMaxH3ImageToVideo (105:104)')
@@ -1099,8 +1198,13 @@ def _activate_ref2va_graph(graph, prompt, width, height, frames, init_image=None
     return graph
 
 
-def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json='',sampler='res_multistep',scheduler='simple'):
+def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json='',sampler='res_multistep',scheduler='simple',
+             reference_video=None,use_reference_audio=False,reference_videos=None,reference_audios=None):
     global _active_prompt_id
+    from .comfy_sampler_ui import normalized_scheduler, PIKA_SCHEDULE, PIKA_STEPS, apply_pika_schedule, pika_lora_name
+    pika = normalized_scheduler(scheduler) == PIKA_SCHEDULE
+    if pika:
+        sampler, steps = 'lcm', PIKA_STEPS
     # Resolve img2img Resize by BEFORE validating /32 and before starting the
     # headless worker. Resize to and txt2img have no resize_by in their payload.
     media = _parse_media_payload(media_json)
@@ -1127,6 +1231,18 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
     from .models import resolve_components
     component_files = module_paths(modules)
     components = resolve_components(checkpoint, component_files)
+    selected_videos = [(v, bool(a)) for v, a in (reference_videos or []) if v]
+    if reference_video:
+        selected_videos.insert(0, (reference_video, bool(use_reference_audio)))
+    if len(selected_videos) > 3:
+        raise ValueError('Ref2VA: at most three reference videos are supported.')
+    if selected_videos and components.mode != 'ref2va':
+        raise ValueError('Reference Video requires a MiniMax H3 Ref2VA checkpoint, not FL2VA.')
+    selected_audios = [a for a in (reference_audios or []) if a]
+    if len(selected_audios) > 3:
+        raise ValueError('Ref2VA supports up to three standalone audio references.')
+    if selected_audios and components.mode != 'ref2va':
+        raise ValueError('Audio Reference requires a MiniMax H3 Ref2VA checkpoint, not FL2VA.')
     _prepare_embedded_model_paths(checkpoint, component_files)
     ensure_server()
     if not _session_current(token):
@@ -1194,7 +1310,16 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
     graph['105:6']['inputs']['unet_name'] = _resolve_model_name(
         'UNETLoader','unet_name',checkpoint,graph['105:6']['inputs']['unet_name'])
 
-    if '105:121' in graph:
+    if pika:
+        wanted = pika_lora_name(components.mode)
+        choices = _choice_values('LoraLoaderModelOnly', 'lora_name')
+        matches = [x for x in (choices or []) if str(x).replace('\\', '/').split('/')[-1].lower() == wanted.lower()]
+        if not matches:
+            raise RuntimeError(f'Pika H3 Flex: required LoRA not found: {wanted}. Put it in Forge models/Lora and restart Forge if necessary.')
+        graph['105:121']['inputs'].update(lora_name=matches[0], strength_model=1.0)
+        graph['105:126']['inputs']['value'] = True
+        print(f'[Comfy Neo] Pika H3 Flex LoRA: {matches[0]}', flush=True)
+    elif '105:121' in graph:
         graph['105:121']['inputs']['lora_name'] = _resolve_model_name(
             'LoraLoaderModelOnly','lora_name',graph['105:121']['inputs']['lora_name'],graph['105:121']['inputs']['lora_name'])
 
@@ -1210,7 +1335,14 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
     started_at=time.time()
     ws_proc=ws_q=None
     pid=None
+    staged_reference_videos = []
     try:
+        from .audio_reference import attach_audio
+        for slot, upload in enumerate(selected_audios):
+            staged_reference_videos.append(attach_audio(graph, upload, Path(_cfg()['comfy_root']) / 'input', slot, frames))
+        for slot, (upload, soundtrack) in enumerate(selected_videos):
+            staged_reference_videos.append(_attach_reference_video(graph, upload, frames,
+                                           use_reference_audio=soundtrack, slot=slot))
         try:
             ws_proc,ws_q=_start_ws_relay(client)
             print('[MiniMax H3 Full Comfy] websocket progress connected')
@@ -1230,11 +1362,14 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
         graph=compile_h3_graph(graph, steps=steps, width=width, height=height,
                                frames=frames, attention_mode=attention_mode)
         from .comfy_sampler_ui import validate
-        actual_sampler, actual_scheduler = validate(sampler, scheduler)
+        actual_sampler, actual_scheduler = ('lcm', PIKA_SCHEDULE) if pika else validate(sampler, scheduler)
         if graph.get('105:17', {}).get('class_type') != 'KSamplerSelect' or graph.get('105:9', {}).get('class_type') != 'BasicScheduler':
             raise RuntimeError('MiniMax H3 expected sampler nodes are missing; refusing a partial graph change')
         graph['105:17']['inputs']['sampler_name'] = actual_sampler
-        graph['105:9']['inputs']['scheduler'] = actual_scheduler
+        if pika:
+            apply_pika_schedule(graph)
+        else:
+            graph['105:9']['inputs']['scheduler'] = actual_scheduler
         print(f'[Comfy Neo] H3 seed={actual_seed} sampler={actual_sampler} scheduler={actual_scheduler}', flush=True)
         print(f'[Comfy Neo] attention mode: {attention_mode}')
         if attention_mode == ATTENTION_CK:
@@ -1336,6 +1471,11 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
             if _active_prompt_id == pid:
                 _active_prompt_id = None
         _stop_ws_relay(ws_proc)
+        for staged_reference_video in staged_reference_videos:
+            try:
+                staged_reference_video.unlink(missing_ok=True)
+            except OSError as exc:
+                print(f'[Comfy Neo Ref2VA] media cleanup deferred: {exc}', flush=True)
 
 
 atexit.register(shutdown_worker, 'Forge exit')
