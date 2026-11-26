@@ -1,11 +1,18 @@
-## Unreleased — v1.0.4 development checkpoint (2026-11-25)
+## v1.1.0 (2026-11-26)
+
+- Add H3 Image text-to-image and reference-based Image Edit in the native Forge interface, including the P-H3-Image (P-Image-OSS) scheduler.
+- Keep image model, encoder, VAE and LoRA selection manual; support native Forge prompt LoRA tags and reference images from ImageStitch.
+- Add image dimension validation with nearest valid sizes. H3 Image ignores the shared Denoising Strength slider; ANIMA and native Forge retain their existing behavior.
+- Shorten preset labels to H3 Video and H3 Image; unify console prefixes and remove the stale ANIMA completion badge.
+- Fit large images within a Comfy Neo-only image viewer and support H3 Image seed recovery when sending to img2img.
+- Expose the owned private worker VRAM release hand-off for the updated Forge AI Prompt extension.
 
 - Add three Ref2VA video reference slots with compact thumbnails, independent soundtrack toggles and local Windows Explorer clipboard paste.
 - Add a separate Audio Reference script for up to three audio files; stage decoded audio in the private Comfy input directory and clean up staged references after generation.
 - Add the Pika H3 Flex schedule option (LCM, six steps, CFG 1, manual sigmas and mode-specific LoRA selection).
 - Pin the embedded ComfyUI source to v0.46.0 (`a277b5bf213e8a44fa34817b7770b54f86ef4cea`).
 - Install stable Windows CUDA 13.0 torch/torchvision/torchaudio wheels from the official PyTorch index, constrain the resolved versions while installing core requirements and verify the installed CUDA build. The tested install resolved torch 2.14.1+cu130.
-- Snapshot the user-tested source without local runtime data. The H3 Image preset and automatic download-cache cleanup are not included yet. No new tagged release.
+- Keep local runtime data out of the repository. Automatic download-cache cleanup remains planned.
 
 ## v1.0.3 (stable source release, 2026-11-10)
 

@@ -1,6 +1,6 @@
 # Forge Comfy Neo
 
-**Main branch: unreleased v1.0.4 development checkpoint (version label remains v1.0.3).** The v1.0.3 tag remains the previous stable release. Windows, NVIDIA CUDA.
+**Version 1.1.0.** Windows, NVIDIA CUDA.
 
 The project keeps the familiar Forge Neo txt2img/img2img interface and runs a **separate, private, headless ComfyUI** for the supported architectures. It does **not** replace your normal Forge pipeline, Python or PyTorch.
 
@@ -17,8 +17,9 @@ No BAT files or manual paths are needed for a fresh installation. Models are **n
 
 ## Using Comfy Neo
 
-- Preset **MiniMax H3**: video generation using the private ComfyUI worker. Ref2VA supports up to three MP4 video references (24 FPS, 2–15 s, up to 96 MiB per file), individual reference soundtrack switches and up to three standalone audio references. Local Windows Explorer clipboard paste is supported.
+- Preset **H3 Video** (MiniMax H3): video generation using the private ComfyUI worker. Ref2VA supports up to three MP4 video references (24 FPS, 2–15 s, up to 96 MiB per file), individual reference soundtrack switches and up to three standalone audio references. Local Windows Explorer clipboard paste is supported.
 - **Pika H3 Flex** schedule: LCM, six steps, CFG 1, manual sigmas and the matching FL2VA/Ref2VA Pika H3 Flex LoRA from the Forge LoRA folder. The LoRAs are not bundled.
+- Preset **H3 Image**: MiniMax H3 still-image generation and reference-based image editing, including the P-H3-Image (P-Image-OSS) schedule. Choose the diffusion model, text encoder, VAE and compatible LoRAs manually. Use native Forge `<lora:filename:weight>` prompt tags. Image dimensions must be multiples of 32 (minimum 64); the validation message suggests nearby valid sizes. The Denoising Strength slider does not affect H3 Image; reference-based editing uses full denoising or the P-H3-Image manual sigma schedule. H3 Image Edit currently uses the Image tab, not masked inpaint.
 - Preset **ANIMA**: txt2img, img2img / Edit, native `<lora:filename:weight>` tags through your existing Forge prompt tools, and experimental Sketch/Inpaint modes.
 - Existing Forge Sampler, Scheduler, Seed, prompt, Gallery and output workflows are reused. Preset settings are separate from ordinary Forge.
 - Runtime model unloading is **lazy**: merely browsing tabs/presets does not evict models; generating with the other engine handles VRAM hand-off.
@@ -34,7 +35,7 @@ received, **restart Forge** before using it.
 
 The separate private ComfyUI/PyTorch environment is **not** replaced by this
 Git operation. This is intentional: runtime upgrades need explicit compatible
-pins and migration logic, not a blind `pip install -U`. The current development checkpoint changes the required runtime. After updating the source and closing Forge, back up and remove this extension's old `runtime/core`, `runtime/venv` and `runtime/private_env_ready.json` before starting Forge and clicking **Install**. Restart Forge after installation. Do not change Forge's own environment. The existing runtime Python downloader, tools and cache can be retained.
+pins and migration logic, not a blind `pip install -U`. When upgrading from an older, incompatible runtime, close Forge, back up and remove this extension's old `runtime/core`, `runtime/venv` and `runtime/private_env_ready.json` before starting Forge and clicking **Install**. Restart Forge after installation. Do not change Forge's own environment. The existing runtime Python downloader, tools and cache can be retained. If the private runtime already matches the v0.46.0 recipe below, keep it; no reinstall is needed for this source update.
 
 ### Runtime in the current main branch
 
@@ -64,6 +65,6 @@ The base extension includes code derived from Forge Neo and its upstream compone
 
 ## Validation and known limitations
 
-The original v1.0.3 stable release was validated separately; its historical audit is in [SOURCE_AUDIT.md](SOURCE_AUDIT.md). The current main branch is a newer development checkpoint with user-reported working installation and generation. It has not been promoted to a new stable release. H3 Image and automatic download-cache cleanup are not implemented in this checkpoint.
+The original v1.0.3 stable release was validated separately; its historical audit is in [SOURCE_AUDIT.md](SOURCE_AUDIT.md). Version 1.1.0 includes later user-tested video and image generation changes. The historical audit does not cover these new changes. Comfy Neo image previews open in a viewport-fitted viewer, and the worker exposes a VRAM hand-off for the updated Forge AI Prompt extension. Automatic download-cache cleanup is not yet implemented.
 
 This does not guarantee every model, extension combination or experimental img2img/Sketch/Inpaint mode. To avoid conflicting Forge callbacks, do not enable this extension alongside the former Comfy Engine/ComfyMax extension.
