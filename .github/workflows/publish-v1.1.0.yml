@@ -1,0 +1,52 @@
+name: Publish Forge Comfy Neo v1.1.0
+on:
+  push:
+    branches: [release-v1.1.0]
+    paths: ['.github/workflows/publish-v1.1.0.yml']
+permissions:
+  contents: write
+concurrency:
+  group: publish-v1.1.0
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: dar06051990-oss/forge-comfy-neo
+      RELEASE_COMMIT: 520c72ecdfc615e9225133a00f9629b4834365af
+    steps:
+      - name: Verify version and publish stable release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(gh api "repos/$GH_REPO/contents/VERSION?ref=$RELEASE_COMMIT" --jq .content | base64 -d)"
+          test "$version" = "1.1.0"
+          if gh release view v1.1.0 >/dev/null 2>&1; then
+            echo "Release already exists; refusing to replace it."
+            exit 1
+          fi
+          if gh api "repos/$GH_REPO/git/ref/tags/v1.1.0" >/dev/null 2>&1; then
+            echo "Tag already exists; refusing to replace it."
+            exit 1
+          fi
+          cat > /tmp/release-notes.md <<'EOF'
+          ## What's new
+          - New H3 Image and reference-based Image Edit preset, including P-H3-Image (P-Image-OSS).
+          - Manual selection of compatible models, text encoders, VAEs and prompt LoRA tags.
+          - ImageStitch references, helpful image size validation and viewport-fitted image previews.
+          - Compact H3 Video and H3 Image labels and unified console messages.
+          - Private Comfy worker VRAM hand-off for the updated Forge AI Prompt extension.
+          - Three video reference slots with thumbnails and individual audio toggles, up to three standalone audio references, and local clipboard paste.
+          - Pika H3 Flex video schedule.
+          
+          ## Runtime
+          - Embedded ComfyUI v0.46.0, private Python 3.13.18 and stable CUDA 13.0 PyTorch wheels.
+          - Existing matching private runtimes do not require reinstallation; older incompatible runtimes need migration as described in the README.
+          
+          ## Notes
+          - H3 Image Edit uses image references, not the shared Denoising Strength slider. Masked H3 inpaint is not included.
+          - Model weights are not bundled.
+          - Automatic download-cache cleanup remains planned.
+          EOF
+          gh release create v1.1.0 --target "$RELEASE_COMMIT" --title "Forge Comfy Neo v1.1.0" --notes-file /tmp/release-notes.md --latest
