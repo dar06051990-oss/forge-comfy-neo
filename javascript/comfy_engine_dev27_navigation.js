@@ -16,7 +16,7 @@
   const comfyAnimaSelected = () => {
     const root = $('forge_ui_preset');
     const input = root?.matches?.('input,select') ? root : root?.querySelector?.('input,select');
-    return /^(comfy_anima|anima)$/i.test(String(input?.value || '').trim());
+    return /^(comfy_anima|anima|h3_image|h3 image|minimax h3 image)$/i.test(String(input?.value || '').trim());
   };
   const isComfyEvent = el => workspaceActive() && !!el?.closest?.('#tab_comfy_engine');
 
@@ -133,7 +133,7 @@
 
   async function toPngDataUrl(imageElement) {
     const src = imageElement?.currentSrc || imageElement?.src;
-    if (!src) throw new Error('No ANIMA preview image available.');
+    if (!src) throw new Error('No Comfy preview image available.');
     // The preview may be WebP/JPG or PNG, while ForgeCanvas LogicalImage
     // *requires* a data:image/png;base64 URL.
     const response = await fetch(src, {credentials:'same-origin'});
@@ -174,14 +174,14 @@
     transferring = true;
     try {
       const img = actualComfyImage(fromTab);
-      if (!img) throw new Error('Generate an ANIMA image first; the native gallery may contain an old result.');
+      if (!img) throw new Error('Generate an image first; the native gallery may contain an old result.');
       const url = img.currentSrc || img.src;
       const picture = await toPngDataUrl(img);
       const values = {...(launched[fromTab] || snapshot(fromTab))};
       // Recover the real random seed from the Comfy image filename where
       // possible. Gradio Number cannot represent integers above MAX_SAFE_INTEGER.
       if (String(values.seed) === '-1') {
-        const match = url.match(/ANIMA-(\d+)-[\da-f]+\.(?:png|jpe?g|webp)/i);
+        const match = url.match(/(?:ANIMA|H3Image)-(\d+)-[\da-f]+\.(?:png|jpe?g|webp)/i);
         if (match) {
           const realSeed = Number(match[1]);
           if (Number.isSafeInteger(realSeed)) values.seed = String(realSeed);
@@ -212,7 +212,7 @@
         target.dispatchEvent(new Event('input',{bubbles:true}));
         target.dispatchEvent(new Event('change',{bubbles:true}));
       }
-      console.log('[Comfy Neo] Sent actual ANIMA image to', toInpaint ? 'inpaint' : 'img2img');
+      console.log('[Comfy Neo] Sent actual Comfy image to', toInpaint ? 'inpaint' : 'img2img');
     } catch (err) {
       console.error('[Comfy Neo] Send to img2img failed:', err);
       notice('Send to Comfy img2img failed: ' + (err?.message || String(err)));

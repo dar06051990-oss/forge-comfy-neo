@@ -152,7 +152,7 @@ def _listener_belongs_to_worker(owner_pid):
         parent = psutil.Process(int(proc.pid))
         return any(child.pid == int(owner_pid) for child in parent.children(recursive=True))
     except Exception as exc:
-        print(f'[MiniMax H3 Embedded] cannot verify worker process tree: {exc}')
+        print(f'[Comfy Neo] cannot verify worker process tree: {exc}')
         return False
 
 
@@ -179,7 +179,7 @@ def _assert_owned_listener(owner_pid):
             with _lock:
                 if _owner_logged_pair != pair:
                     _owner_logged_pair = pair
-                    print(f'[MiniMax H3 Embedded] verified owned child listener PID '
+                    print(f'[Comfy Neo] verified owned child listener PID '
                           f'{owner_pid} (launcher PID {proc.pid})')
         return True
     raise RuntimeError(
@@ -243,7 +243,7 @@ def _release_forge_models_for_h3():
 
         had_model = getattr(sd_models.model_data, 'sd_model', None) is not None
         if had_model:
-            print('[MiniMax H3 Full Comfy] releasing Forge model before H3 backend...')
+            print('[Comfy Neo] releasing Forge model before H3 backend...')
 
         # Drop Forge's strong reference as well as GPU/offload registrations.
         sd_models.model_data.set_sd_model(None)
@@ -254,10 +254,10 @@ def _release_forge_models_for_h3():
         memory_management.soft_empty_cache()
         gc.collect()
 
-        print('[MiniMax H3 Full Comfy] Forge model memory released for H3')
+        print('[Comfy Neo] Forge model memory released for H3')
         return True
     except Exception as exc:
-        print(f'[MiniMax H3 Full Comfy] Forge model unload warning: {exc}')
+        print(f'[Comfy Neo] Forge model unload warning: {exc}')
         return False
 
 
@@ -288,7 +288,7 @@ def shutdown_worker(reason='shutdown', expected_epoch=None):
     with _lock:
         if expected_epoch is not None:
             if _session_active or expected_epoch != _session_epoch:
-                print('[MiniMax H3 Embedded] stale shutdown ignored')
+                print('[Comfy Neo] stale shutdown ignored')
                 return False
         proc = _proc
         _proc = None
@@ -306,7 +306,7 @@ def shutdown_worker(reason='shutdown', expected_epoch=None):
         if job is not None:
             job.close()
         if proc and proc.poll() is None:
-            print(f'[MiniMax H3 Embedded] stopping owned worker PID {proc.pid} ({reason})')
+            print(f'[Comfy Neo] stopping owned worker PID {proc.pid} ({reason})')
             if job is None:
                 _kill_process_tree(proc.pid)
             try:
@@ -350,7 +350,7 @@ def deactivate_session(reason='leaving H3 preset'):
     return True
 
 
-def release_for_native_forge():
+def release_for_native_forge(destination="native Forge"):
     """DEV28: return dedicated Comfy VRAM to the native Forge engine.
 
     Stops only the worker *launched by this extension*. Unlike /free, process
@@ -374,19 +374,19 @@ def release_for_native_forge():
         # This worker belongs solely to Comfy Neo. A direct owned-process
         # shutdown cancels inference without a potentially 30-second blocking
         # /interrupt HTTP request during a tab switch.
-        print('[Comfy Neo] Active Comfy generation cancelled on switch to Forge')
+        print(f'[Comfy Neo] Active Comfy generation cancelled on switch to {destination}')
 
     if owned:
-        print('[Comfy Neo] Switching to native Forge: stopping owned Comfy worker to release VRAM')
-        released = shutdown_worker('return to native Forge', expected_epoch=epoch)
+        print(f'[Comfy Neo] Switching to {destination}: stopping owned Comfy worker to release VRAM')
+        released = shutdown_worker(f'return to {destination}', expected_epoch=epoch)
         if released:
-            print('[Comfy Neo] Private Comfy worker stopped; VRAM released to Forge')
+            print(f'[Comfy Neo] Private Comfy worker stopped; VRAM released to {destination}')
         else:
             print('[Comfy Neo] Worker shutdown superseded by a newer Comfy session')
         return released
 
     if had_session:
-        print('[Comfy Neo] Switching to native Forge: no active Comfy worker')
+        print(f'[Comfy Neo] Switching to {destination}: no active Comfy worker')
     return True
 
 
@@ -575,7 +575,7 @@ def ensure_server(timeout=90):
             _owner_logged_pair = None
             _api_owner_verified_at = 0.0
             _api_owner_verified_pid = None
-            print(f'[MiniMax H3 Embedded] private runtime Python: {py}')
+            print(f'[Comfy Neo] private runtime Python: {py}')
             # On Windows prefer the OS-managed lifetime guarantee. No extra
             # watchdog Python process is required, and Forge's abrupt exit
             # closes this handle even when Python atexit callbacks do not run.
@@ -610,8 +610,8 @@ def ensure_server(timeout=90):
                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                         close_fds=True, **watchdog_kwargs)
                 except Exception as exc:
-                    print(f'[MiniMax H3 Full Comfy] parent watchdog unavailable: {exc}')
-            print(f'[MiniMax H3 Full Comfy] warm worker starting on {PORT}; log: {logpath}')
+                    print(f'[Comfy Neo] parent watchdog unavailable: {exc}')
+            print(f'[Comfy Neo] warm worker starting on {PORT}; log: {logpath}')
     end=time.time()+timeout
     while time.time()<end:
         if _alive():
@@ -619,7 +619,7 @@ def ensure_server(timeout=90):
                 owner = _listener_pid_windows(PORT)
                 if owner is not None:
                     _assert_owned_listener(owner)
-            print('[MiniMax H3 Embedded] worker ready')
+            print('[Comfy Neo] worker ready')
             return True
         if _proc and _proc.poll() is not None:
             reason = f'Comfy worker exited during startup (exit code {_proc.returncode}).'
@@ -666,10 +666,10 @@ def _post(path,obj):
             return json.loads(raw)
     except urllib.error.HTTPError as e:
         raw=e.read().decode('utf-8', errors='replace')
-        print(f'[MiniMax H3 Full Comfy] API ERROR {e.code} {e.reason} on {path}')
-        print('[MiniMax H3 Full Comfy] ---- Comfy response begin ----')
+        print(f'[Comfy Neo] API ERROR {e.code} {e.reason} on {path}')
+        print('[Comfy Neo] ---- Comfy response begin ----')
         print(raw or '<empty response body>')
-        print('[MiniMax H3 Full Comfy] ---- Comfy response end ----')
+        print('[Comfy Neo] ---- Comfy response end ----')
         try:
             parsed=json.loads(raw)
             detail=json.dumps(parsed, ensure_ascii=False, indent=2)
@@ -694,7 +694,7 @@ def _choice_values(class_type, input_name):
         spec = info[class_type]['input']['required'][input_name][0]
         return list(spec) if isinstance(spec, list) else []
     except Exception as e:
-        print(f'[MiniMax H3 Full Comfy] could not query {class_type}.{input_name}: {e}')
+        print(f'[Comfy Neo] could not query {class_type}.{input_name}: {e}')
         return []
 
 def _resolve_model_name(class_type, input_name, selected, fallback):
@@ -713,14 +713,14 @@ def _resolve_model_name(class_type, input_name, selected, fallback):
     if wanted:
         hits = [x for x in choices if os.path.basename(str(x).replace('\\', os.sep)).lower() == wanted]
         if len(hits) == 1:
-            print(f'[MiniMax H3 Full Comfy] resolved {os.path.basename(selected)} -> {hits[0]}')
+            print(f'[Comfy Neo] resolved {os.path.basename(selected)} -> {hits[0]}')
             return hits[0]
         if len(hits) > 1:
-            print(f'[MiniMax H3 Full Comfy] multiple matches for {wanted}; using {hits[0]}')
+            print(f'[Comfy Neo] multiple matches for {wanted}; using {hits[0]}')
             return hits[0]
     # Keep the known-good workflow value when the selected Forge file is not present in Comfy.
     if fallback in choices:
-        print(f'[MiniMax H3 Full Comfy] {wanted or selected} is not visible to Comfy; keeping workflow model {fallback}')
+        print(f'[Comfy Neo] {wanted or selected} is not visible to Comfy; keeping workflow model {fallback}')
         return fallback
     return selected or fallback
 
@@ -732,16 +732,16 @@ def interrupt():
         proc = _proc
         owned = proc is not None and proc.poll() is None
     if not (owned and prompt_id):
-        print('[MiniMax H3 Embedded] STOP: no active owned prompt')
+        print('[Comfy Neo] STOP: no active owned prompt')
         return True  # preserve legacy Forge Stop callback behavior
     try:
         # Targeted interrupt handles running prompts; queue deletion handles
         # prompts submitted but not yet executing.
         _post('/interrupt', {'prompt_id': str(prompt_id)})
         _post('/queue', {'delete': [str(prompt_id)]})
-        print(f'[MiniMax H3 Embedded] STOP requested for {prompt_id}')
+        print(f'[Comfy Neo] STOP requested for {prompt_id}')
     except Exception as exc:
-        print(f'[MiniMax H3 Embedded] STOP failed for {prompt_id}: {exc}')
+        print(f'[Comfy Neo] STOP failed for {prompt_id}: {exc}')
     return True
 
 
@@ -755,17 +755,17 @@ def free_embedded_models():
         owned = _proc is not None and _proc.poll() is None
         busy = _active_prompt_id is not None
     if not owned:
-        print('[MiniMax H3 Embedded] No owned worker; nothing to free')
+        print('[Comfy Neo] No owned worker; nothing to free')
         return False
     if busy:
-        print('[MiniMax H3 Embedded] Cannot unload models during active generation')
+        print('[Comfy Neo] Cannot unload models during active generation')
         return False
     try:
         _post('/free', {'unload_models': True, 'free_memory': True})
-        print('[MiniMax H3 Embedded] model/cache unload requested')
+        print('[Comfy Neo] model/cache unload requested')
         return True
     except Exception as exc:
-        print(f'[MiniMax H3 Embedded] memory cleanup failed: {exc}')
+        print(f'[Comfy Neo] memory cleanup failed: {exc}')
         return False
 
 
@@ -848,7 +848,7 @@ def _print_ws_event(evt, pid, graph, progress_state):
     if event_pid and event_pid != str(pid): return None
 
     if typ == 'execution_start':
-        print('[MiniMax H3 Full Comfy] Comfy execution started')
+        print('[Comfy Neo] Comfy execution started')
     elif typ == 'executing':
         node=data.get('node')
         if node is None:
@@ -865,7 +865,7 @@ def _print_ws_event(evt, pid, graph, progress_state):
             if cls == 'SamplerCustomAdvanced':
                 now=time.time(); progress_state['sample_start']=now; progress_state['last_t']=now
             if cls in labels:
-                print(f'[MiniMax H3 Full Comfy] {labels[cls]}...')
+                print(f'[Comfy Neo] {labels[cls]}...')
     elif typ == 'progress':
         try:
             value=int(data.get('value')); maximum=int(data.get('max')); node=str(data.get('node') or '')
@@ -884,7 +884,7 @@ def _print_ws_event(evt, pid, graph, progress_state):
                 avg=elapsed/value if value else 0
                 eta=max(0.0, avg*(maximum-value))
                 speed=step_dt if step_dt > 0 else avg
-                print(f'[MiniMax H3 Full Comfy] {value}/{maximum} '
+                print(f'[Comfy Neo] {value}/{maximum} '
                       f'[{_fmt_clock(elapsed)}<{_fmt_clock(eta)}, {speed:.2f}s/it]')
     elif typ == 'execution_success':
         return 'success'
@@ -892,7 +892,7 @@ def _print_ws_event(evt, pid, graph, progress_state):
         return 'interrupted'
     elif typ == 'execution_error':
         msg=data.get('exception_message') or data.get('exception_type') or data
-        print(f'[MiniMax H3 Full Comfy] execution error: {msg}')
+        print(f'[Comfy Neo] execution error: {msg}')
         return 'error'
     return None
 
@@ -1022,7 +1022,7 @@ def _resolve_h3_dimensions(width, height, media):
         step = 8
     width = math.floor(source_width * factor / step + 0.5) * step
     height = math.floor(source_height * factor / step + 0.5) * step
-    print(f'[MiniMax H3 Full Comfy] img2img Resize by {factor:g}: '
+    print(f'[Comfy Neo] img2img Resize by {factor:g}: '
           f'{source_width}x{source_height} -> {width}x{height} (step {step})')
     return width, height
 
@@ -1133,7 +1133,7 @@ def _attach_reference_video(graph, upload, frames, use_reference_audio=False, sl
             graph['105:128']['inputs'][f'ref_video_audios.ref_video_audio_{slot}'] = [f'h3_refvideo_frames_{slot}', 1]
         else:
             graph['105:128']['inputs'].pop(f'ref_video_audios.ref_video_audio_{slot}', None)
-        print(f'[Comfy Neo Ref2VA] MP4 video reference {slot + 1}: {source.name} '
+        print(f'[Comfy Neo] MP4 video reference {slot + 1}: {source.name} '
               f'({info["fps"]:.2f} FPS, {info["duration"]:.2f}s); '
               f'frames connected; reference soundtrack '
               f'{"enabled" if use_reference_audio and has_soundtrack else "disabled / absent"}.', flush=True)
@@ -1189,12 +1189,12 @@ def _activate_ref2va_graph(graph, prompt, width, height, frames, init_image=None
     if init_image:
         main_node = _add_load_image_nodes(graph, [init_image], 'h3_main_img2img')[0]
         graph['105:128']['inputs']['ref_images.ref_image_0'] = list(main_node)
-        print('[MiniMax H3 Full Comfy] ref_image_0 <- main img2img input')
+        print('[Comfy Neo] ref_image_0 <- main img2img input')
         slot = 1
     for node_id, output_idx in _add_load_image_nodes(graph, stitch_images, 'h3_stitch'):
         graph['105:128']['inputs'][f'ref_images.ref_image_{slot}'] = [node_id, output_idx]
         slot += 1
-    print(f'[MiniMax H3 Full Comfy] Ref2VA slots: main={int(bool(init_image))}, ImageStitch={len(stitch_images)}, total={slot}')
+    print(f'[Comfy Neo] Ref2VA slots: main={int(bool(init_image))}, ImageStitch={len(stitch_images)}, total={slot}')
     return graph
 
 
@@ -1249,7 +1249,7 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
         return None
     template = REF_TEMPLATE if components.mode == 'ref2va' else FL_TEMPLATE
     graph = json.loads(template.read_text(encoding='utf-8'))
-    print(f'[MiniMax H3 Full Comfy] selected {components.mode} API workflow: {template.name}')
+    print(f'[Comfy Neo] selected {components.mode} API workflow: {template.name}')
     init_image = media.get('init_image')
     stitch_images = list(media.get('stitch_images') or [])
     if components.mode == 'ref2va':
@@ -1257,7 +1257,7 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
         if len(ref_images) > 9:
             raise RuntimeError(f'MiniMax H3 Ref2VA takes up to 9 reference pictures; got {len(ref_images)}.')
         if ref_images:
-            print(f'[MiniMax H3 Full Comfy] reference mode with {len(ref_images)} picture(s)')
+            print(f'[Comfy Neo] reference mode with {len(ref_images)} picture(s)')
             graph = _activate_ref2va_graph(graph, prompt, width, height, frames, init_image, stitch_images)
         else:
             graph['105:128']['inputs']['prompt']=str(prompt)
@@ -1267,8 +1267,8 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
         if first_image or last_image:
             extra = max(0, len(stitch_images) - (1 if last_image else 0))
             if extra:
-                print(f'[MiniMax H3 Full Comfy] FL2VA uses the first ImageStitch picture as last frame; ignoring {extra} extra picture(s)')
-            print(f'[MiniMax H3 Full Comfy] first/last-frame mode: first={bool(first_image)} last={bool(last_image)}')
+                print(f'[Comfy Neo] FL2VA uses the first ImageStitch picture as last frame; ignoring {extra} extra picture(s)')
+            print(f'[Comfy Neo] first/last-frame mode: first={bool(first_image)} last={bool(last_image)}')
             graph = _activate_fl2va_graph(graph, prompt, width, height, frames, first_image, last_image)
         else:
             graph['105:104']['inputs']['prompt']=str(prompt)
@@ -1290,7 +1290,7 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
     actual_seed=requested_seed if requested_seed >= 0 else secrets.randbelow(2**53)  # gr.Number/JS-safe for Reuse Seed
     graph['105:15']['inputs']['noise_seed']=actual_seed
     if requested_seed < 0:
-        print(f'[MiniMax H3 Full Comfy] Forge seed -1 -> random Comfy seed {actual_seed}')
+        print(f'[Comfy Neo] Forge seed -1 -> random Comfy seed {actual_seed}')
     graph['105:125']['inputs']['value']=int(steps)
 
     selected_clip = selected_audio = selected_video = None
@@ -1323,7 +1323,7 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
         graph['105:121']['inputs']['lora_name'] = _resolve_model_name(
             'LoraLoaderModelOnly','lora_name',graph['105:121']['inputs']['lora_name'],graph['105:121']['inputs']['lora_name'])
 
-    print('[MiniMax H3 Full Comfy] resolved models:',
+    print('[Comfy Neo] resolved models:',
           graph['105:6']['inputs']['unet_name'], '|',
           graph['105:13']['inputs']['clip_name'], '|',
           graph['105:24']['inputs']['vae_name'], '|',
@@ -1345,9 +1345,9 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
                                            use_reference_audio=soundtrack, slot=slot))
         try:
             ws_proc,ws_q=_start_ws_relay(client)
-            print('[MiniMax H3 Full Comfy] websocket progress connected')
+            print('[Comfy Neo] websocket progress connected')
         except Exception as exc:
-            print(f'[MiniMax H3 Full Comfy] websocket progress unavailable, history fallback: {exc}')
+            print(f'[Comfy Neo] websocket progress unavailable, history fallback: {exc}')
 
         # DEV14: Attention is a Comfy Neo setting, not a global Forge option.
         # Stable is an unchanged compiled graph (no extra attention nodes).
@@ -1378,14 +1378,14 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
         pid=_post('/prompt',{'prompt':graph,'client_id':client})['prompt_id']
         with _lock:
             _active_prompt_id = pid
-        print(f'[MiniMax H3 Full Comfy] submitted {pid}: {frames} frames {width}x{height}')
+        print(f'[Comfy Neo] submitted {pid}: {frames} frames {width}x{height}')
         progress_state={'steps': int(steps)}
         terminal=None
         end=time.time()+3600
 
         while time.time()<end:
             if not _session_current(token):
-                print('[MiniMax H3 Full Comfy] stale H3 job discarded after preset/session change')
+                print('[Comfy Neo] stale H3 job discarded after preset/session change')
                 return None
             if ws_q is not None:
                 while True:
@@ -1404,14 +1404,14 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
                         terminal=term
 
             if terminal == 'interrupted':
-                print('[MiniMax H3 Full Comfy] generation stopped by user')
+                print('[Comfy Neo] generation stopped by user')
                 return None
 
             try:
                 h=_get('/history/'+pid)
             except Exception:
                 if not _session_current(token):
-                    print('[MiniMax H3 Full Comfy] worker stopped after leaving H3; old result ignored')
+                    print('[Comfy Neo] worker stopped after leaving H3; old result ignored')
                     return None
                 raise
             if pid in h:
@@ -1422,7 +1422,7 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
                     isinstance(m,(list,tuple)) and m and str(m[0]).lower()=='execution_interrupted'
                     for m in messages)
                 if interrupted:
-                    print('[MiniMax H3 Full Comfy] generation stopped by user')
+                    print('[Comfy Neo] generation stopped by user')
                     return None
                 if status.get('status_str')=='error' or terminal == 'error':
                     raise RuntimeError(str(status))
@@ -1438,7 +1438,7 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
                                 if path.is_file():
                                     if not _session_current(token): return None
                                     elapsed=time.time()-started_at
-                                    print(f'[MiniMax H3 Full Comfy] done in {elapsed:.1f}s: {path}')
+                                    print(f'[Comfy Neo] done in {elapsed:.1f}s: {path}')
                                     return str(path)
 
                 def walk(v):
@@ -1458,7 +1458,7 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
                     if path.is_file():
                         if not _session_current(token): return None
                         elapsed=time.time()-started_at
-                        print(f'[MiniMax H3 Full Comfy] done in {elapsed:.1f}s: {path}')
+                        print(f'[Comfy Neo] done in {elapsed:.1f}s: {path}')
                         return str(path)
                 if status.get('completed') or terminal in ('success','executing_done'):
                     raise RuntimeError('Comfy finished but no MP4 was found in history output')
@@ -1475,7 +1475,7 @@ def generate(prompt,width,height,frames,seed,steps,checkpoint,modules,media_json
             try:
                 staged_reference_video.unlink(missing_ok=True)
             except OSError as exc:
-                print(f'[Comfy Neo Ref2VA] media cleanup deferred: {exc}', flush=True)
+                print(f'[Comfy Neo] media cleanup deferred: {exc}', flush=True)
 
 
 atexit.register(shutdown_worker, 'Forge exit')

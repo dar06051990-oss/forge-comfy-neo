@@ -148,7 +148,7 @@ def resolve_lora_choice(name, choices, roots):
     aliases = next(iter(matches.values()))
     choice = sorted(aliases, key=lambda value: (-len(Path(value.replace('\\','/')).parts), value.casefold()))[0]
     if used_alias:
-        print(f'[Comfy Neo ANIMA] LoRA alias: {name!r} -> {choice!r}', flush=True)
+        print(f'[Comfy Neo] LoRA alias: {name!r} -> {choice!r}', flush=True)
     return choice
 
 
@@ -356,7 +356,7 @@ def _choice(class_type, field, selected, fallback=None):
     roots = _comfy_search_roots(class_type)
     match = _resolve_choice_path(selected, choices, roots)
     if match is not None:
-        print(f'[Comfy Neo ANIMA] {class_type}: {Path(selected).name} -> {match}')
+        print(f'[Comfy Neo] {class_type}: {Path(selected).name} -> {match}')
         return match
     raise ValueError(
         'ANIMA: the exact selected file is not visible to the running private '
@@ -613,7 +613,7 @@ def _autosave_preview(preview, seed, is_img2img=False):
     directory.mkdir(parents=True, exist_ok=True)
     dest = directory / f'ANIMA_{seed}_{uuid.uuid4().hex[:8]}{preview.suffix}'
     shutil.copy2(preview, dest)
-    print(f'[Comfy Neo ANIMA] auto-saved to Forge samples: {dest}', flush=True)
+    print(f'[Comfy Neo] auto-saved to Forge samples: {dest}', flush=True)
     return dest
 
 
@@ -638,7 +638,7 @@ def _consume_progress(ws_queue, jobid, steps, state):
             if typ == 'executing' and str(data.get('node')) == '7' and not state.get('started'):
                 state['started'] = time.monotonic()
                 state['last_time'] = state['started']
-                print('[Comfy Neo ANIMA] sampling...', flush=True)
+                print('[Comfy Neo] sampling...', flush=True)
             if typ != 'progress':
                 continue
             step, maximum = int(data.get('value')), int(data.get('max'))
@@ -655,7 +655,7 @@ def _consume_progress(ws_queue, jobid, steps, state):
             state['last_time'] = now
             state['last_step'] = step
             speed = f'{delta:.2f}s/it' if delta >= 1 else f'{1/max(delta, 1e-5):.2f}it/s'
-            print(f'[Comfy Neo ANIMA] {step}/{maximum} '
+            print(f'[Comfy Neo] {step}/{maximum} '
                   f'[{elapsed:.1f}s elapsed, {eta:.1f}s remaining, {speed}]', flush=True)
         except (ValueError, TypeError, AttributeError, json.JSONDecodeError):
             continue
@@ -720,7 +720,7 @@ def generate(prompt, negative, width, height, steps, cfg, seed, checkpoint, modu
         for name, model_strength, clip_strength in requested_loras:
             choice = resolve_lora_choice(name, choices, roots)
             resolved_loras.append((choice, model_strength, clip_strength))
-            print(f'[Comfy Neo ANIMA] LoRA: {choice} '
+            print(f'[Comfy Neo] LoRA: {choice} '
                   f'(model={model_strength:g}, clip={clip_strength:g})', flush=True)
     # Upload our input into the PRIVATE worker (not native Forge, not another Comfy).
     # Each image filename is unique; no dangling Comfy cache entries are created.
@@ -734,7 +734,7 @@ def generate(prompt, negative, width, height, steps, cfg, seed, checkpoint, modu
         image_name = str(uploaded.get('name') or '')
         if not image_name.startswith('anima_dev26_') or Path(image_name).name != image_name:
             raise RuntimeError('ANIMA img2img: Comfy returned an unexpected upload filename.')
-        print(f'[Comfy Neo ANIMA] img2img input uploaded: {image_name} '
+        print(f'[Comfy Neo] img2img input uploaded: {image_name} '
               f'-> {width}x{height}; mode={edit_mode}, resize_mode={resize_mode}, '
               f'denoise={float(denoise):g}, mask={preserve is not None}', flush=True)
     graph, actual_seed = build_graph(
@@ -754,18 +754,18 @@ def generate(prompt, negative, width, height, steps, cfg, seed, checkpoint, modu
     try:
         try:
             ws_proc, ws_queue = backend._start_ws_relay(client)
-            print('[Comfy Neo ANIMA] websocket progress connected', flush=True)
+            print('[Comfy Neo] websocket progress connected', flush=True)
         except Exception as exc:
-            print(f'[Comfy Neo ANIMA] websocket unavailable; completion-only fallback: {exc}', flush=True)
+            print(f'[Comfy Neo] websocket unavailable; completion-only fallback: {exc}', flush=True)
         jobid = backend._post('/prompt', {'prompt': graph, 'client_id': client})['prompt_id']
         with backend._lock:
             backend._active_prompt_id = jobid
-        print(f'[Comfy Neo ANIMA] submitted {jobid}: {width}x{height}, '
+        print(f'[Comfy Neo] submitted {jobid}: {width}x{height}, '
               f'{steps} steps, {sampler}/{scheduler}, {attention}, '
               f'format={fmt}, auto_save={do_save}', flush=True)
         while time.monotonic() - started < 1800:
             if not backend._session_current(token):
-                print('[Comfy Neo ANIMA] job cancelled after worker session ended', flush=True)
+                print('[Comfy Neo] job cancelled after worker session ended', flush=True)
                 return None
             _consume_progress(ws_queue, jobid, steps, progress)
             history = backend._get('/history/' + str(jobid), timeout=25)
@@ -800,7 +800,7 @@ def generate(prompt, negative, width, height, steps, cfg, seed, checkpoint, modu
                     if do_save:
                         _autosave_preview(result, actual_seed, is_img2img=bool(image_name))
                     _consume_progress(ws_queue, jobid, steps, progress)
-                    print(f'[Comfy Neo ANIMA] done in {time.monotonic()-started:.1f}s; '
+                    print(f'[Comfy Neo] done in {time.monotonic()-started:.1f}s; '
                           f'preview (NOT auto-saved): {result}', flush=True)
                     return str(result)
                 if status.get('completed') or state == 'success':
@@ -821,4 +821,4 @@ def generate(prompt, negative, width, height, steps, cfg, seed, checkpoint, modu
                 if one_use_file.parent == input_dir and one_use_file.name.startswith('anima_dev26_'):
                     one_use_file.unlink(missing_ok=True)
             except (OSError, ValueError, KeyError) as exc:
-                print(f'[Comfy Neo ANIMA] temporary input cleanup warning: {exc}', flush=True)
+                print(f'[Comfy Neo] temporary input cleanup warning: {exc}', flush=True)

@@ -16,12 +16,11 @@ from modules import script_callbacks
 # This gives the two engines truly separate settings and model selections;
 # Forge's original preset callback still controls all the native sliders.
 
-def _register_comfy_anima_preset():
+def _register_comfy_anima_preset(name="comfy_anima"):
     from modules import shared
     from modules_forge import presets
     from forge_h3.native.presets import _add_enum_member
-    name = 'comfy_anima'
-    if name in getattr(shared.cmd_opts, 'disable_preset', ()) or 'anima' in getattr(shared.cmd_opts, 'disable_preset', ()):
+    if name in getattr(shared.cmd_opts, 'disable_preset', ()) or (name == 'comfy_anima' and 'anima' in getattr(shared.cmd_opts, 'disable_preset', ())):
         return
     arch = _add_enum_member(presets.PresetArch, name)
     source = presets.PresetArch.anima
@@ -30,8 +29,11 @@ def _register_comfy_anima_preset():
         registry[arch] = registry[source]
     # Use Comfy's native lower-case sampler names for this preset. The vanilla
     # Forge ANIMA settings remain unchanged and continue using Forge labels.
-    presets.SAMPLERS[arch] = 'er_sde'
-    presets.SCHEDULERS[arch] = 'beta'
+    presets.SAMPLERS[arch] = 'euler' if name == 'h3_image' else 'er_sde'
+    presets.SCHEDULERS[arch] = 'simple' if name == 'h3_image' else 'beta'
+    if name == 'h3_image':
+        presets.STEPS[arch] = 6
+        presets.CFG[arch] = 1.0
     templates = {}
     presets.register(templates)
     from forge_h3.comfy_sampler_ui import available_choices
@@ -39,10 +41,13 @@ def _register_comfy_anima_preset():
         available_samplers, available_schedulers = available_choices()
     except (OSError, SyntaxError, ValueError):
         available_samplers, available_schedulers = ['er_sde', 'euler', 'res_multistep'], ['simple', 'beta']
+    if name == 'h3_image':
+        from forge_h3.comfy_sampler_ui import PH3_SCHEDULE, PH3_LABEL
+        available_schedulers = [(x,x) for x in available_schedulers] + [(PH3_LABEL, PH3_SCHEDULE)]
     for key, info in templates.items():
         if (key.startswith(name + '_') or key.endswith('_' + name)) and key not in shared.opts.data_labels:
             if getattr(info, 'section', (None,))[0] == 'ui_' + name:
-                info.section = ('ui_' + name, 'ANIMA Preset')
+                info.section = ('ui_' + name, 'H3 Image Preset' if name == 'h3_image' else 'ANIMA Preset')
                 info.category_id = 'comfy_engine'
                 if key.endswith('_sampler'):
                     info.component_args = lambda entries=available_samplers: {
@@ -53,8 +58,9 @@ def _register_comfy_anima_preset():
             shared.opts.add_option(key, info)
 
 _register_comfy_anima_preset()
+_register_comfy_anima_preset("h3_image")
 
-COMFY_PRESETS = {'h3': 'MiniMax H3', 'comfy_anima': 'ANIMA'}
+COMFY_PRESETS = {'h3': 'H3 Video', 'h3_image': 'H3 Image', 'comfy_anima': 'ANIMA'}
 
 
 def _choices(shared, preset_names=None):
@@ -63,7 +69,7 @@ def _choices(shared, preset_names=None):
         from modules_forge.presets import PresetArch
         preset_names = PresetArch.choices()
     disabled = set(getattr(shared.cmd_opts, "disable_preset", ()) or ())
-    forge = [name for name in preset_names if name not in {'h3', 'comfy_anima'} and name not in disabled]
+    forge = [name for name in preset_names if name not in {'h3', 'comfy_anima', 'h3_image'} and name not in disabled]
     if getattr(shared.cmd_opts, "sort_preset", False):
         forge.sort()
     comfy = [(label, name) for name, label in COMFY_PRESETS.items()
@@ -151,7 +157,7 @@ def _apply_sampler_lists(preset_value, updates, originals, shared):
     updates = list(updates)
     if len(updates) != 22:
         raise RuntimeError('Unexpected Forge preset control count; refusing partial update')
-    if preset_value in ('comfy_anima', 'h3'):
+    if preset_value in ('comfy_anima', 'h3', 'h3_image'):
         try:
             samplers, schedulers = available_choices()
         except (OSError, SyntaxError, ValueError) as exc:
@@ -160,12 +166,14 @@ def _apply_sampler_lists(preset_value, updates, originals, shared):
         # Both engines use the actual ComfyUI identifiers; H3 used to
         # display Forge's title-case labels even though they were ignored.
         from forge_h3.comfy_sampler_ui import normalized_sampler, normalized_scheduler
-        from forge_h3.comfy_sampler_ui import h3_choices, PIKA_SCHEDULE, PIKA_LABEL
+        from forge_h3.comfy_sampler_ui import h3_choices, PIKA_SCHEDULE, PIKA_LABEL, PH3_SCHEDULE, PH3_LABEL
         if preset_value == 'h3':
             samplers, schedulers = h3_choices(samplers, schedulers)
+        if preset_value == "h3_image":
+            schedulers.append(PH3_SCHEDULE)
         key_prefix = preset_value
         choice_s = [(name, name) for name in samplers]
-        choice_c = [(PIKA_LABEL if name == PIKA_SCHEDULE else name, name) for name in schedulers]
+        choice_c = [(PIKA_LABEL if name == PIKA_SCHEDULE else PH3_LABEL if name == PH3_SCHEDULE else name, name) for name in schedulers]
         for idx, choices, suffix in (
             (6, choice_s, 't2i_sampler'),
             (7, choice_s, 'i2i_sampler'),
@@ -178,6 +186,8 @@ def _apply_sampler_lists(preset_value, updates, originals, shared):
             allowed = {value for _, value in choices}
             if wanted not in allowed:
                 fallback = ('res_multistep' if idx < 8 else 'simple') if preset_value == 'h3' else ('er_sde' if idx < 8 else 'beta')
+                if preset_value == 'h3_image':
+                    fallback = 'euler' if idx < 8 else 'simple'
                 wanted = fallback if fallback in allowed else choices[0][1]
                 print('[Comfy Neo] Invalid preset %s; using %s' % (setting, wanted))
             updates[idx] = gr.update(choices=choices, value=wanted)
@@ -187,6 +197,12 @@ def _apply_sampler_lists(preset_value, updates, originals, shared):
                     updates[sampler_idx] = gr.update(choices=choice_s, value='lcm')
                     updates[steps_idx] = gr.update(value=6)
                     updates[cfg_idx] = gr.update(value=1.0)
+        if preset_value == 'h3_image':
+            for si, sa, st, cf in ((8,6,3,14),(9,7,5,16)):
+                if updates[si].get('value') == PH3_SCHEDULE:
+                    updates[sa] = gr.update(choices=choice_s, value='er_sde')
+                    updates[st] = gr.update(value=8)
+                    updates[cf] = gr.update(value=1.0)
     else:
         for idx in (6, 7, 8, 9):
             # The native callback knows the correct value for the selected Forge
@@ -261,7 +277,7 @@ def _bind_preset_navigation():
             next_state['comfy'] = value
         native = main_entry.on_preset_change(value)
         values = _apply_sampler_lists(value, native, original_choices, shared)
-        return [values[i] if i in (6, 7, 8, 9) or value == 'h3' else gr.update() for i in sampling_indices] + [next_state]
+        return [values[i] if i in (6, 7, 8, 9) or value in ('h3', 'h3_image') else gr.update() for i in sampling_indices] + [next_state]
 
     preset.change(fn=on_manual_selection, inputs=[preset, memory],
                   outputs=sampler_outputs + [memory],

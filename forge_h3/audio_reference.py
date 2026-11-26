@@ -51,7 +51,7 @@ def attach_audio(graph, upload, input_dir, slot, frames):
         key = f'h3_refaudio_load_{slot}'
         graph[key] = {'class_type': 'LoadAudio', 'inputs': {'audio': staged.name}}
         node['inputs'][f'ref_audios.ref_audio_{slot}'] = [key, 0]
-        print(f'[Comfy Neo Ref2VA] Audio reference {slot+1}: {source.name}', flush=True)
+        print(f'[Comfy Neo] Audio reference {slot+1}: {source.name}', flush=True)
         return staged
     except Exception:
         staged.unlink(missing_ok=True)

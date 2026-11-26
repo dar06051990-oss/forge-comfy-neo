@@ -71,8 +71,8 @@ def settings():
     for key, info in shared.opts.data_labels.items():
         # Legacy H3 preset was registered as a normal Forge preset.
         if getattr(info, 'section', None) in (
-            ('ui_h3', 'H3'), ('ui_h3', 'MiniMax H3 Preset')):
-            info.section = ('ui_h3', 'MiniMax H3 Preset')
+            ('ui_h3', 'H3'), ('ui_h3', 'MiniMax H3 Preset'), ('ui_h3', 'H3 Video Preset')):
+            info.section = ('ui_h3', 'H3 Video Preset')
             info.category_id = 'comfy_engine'
         # Comfy-only ANIMA pseudo-preset created by the native preset registry.
         if key.startswith('comfy_anima_') and getattr(info, 'section', (None,))[0] == 'ui_comfy_anima':
@@ -121,11 +121,15 @@ def settings():
     if shared.opts.data.get('h3_attention_mode') == ATTENTION_CK_LEGACY:
         shared.opts.data['h3_attention_mode'] = ATTENTION_CK
     shared.opts.add_option('h3_attention_mode', shared.OptionInfo(
-        ATTENTION_STABLE, 'Video attention backend (MiniMax H3)', gr.Dropdown,
+        ATTENTION_STABLE, 'Video attention backend (H3 Video)', gr.Dropdown,
         lambda: {'choices': list(ATTENTION_MODES)},
         section=('comfy_video_output', 'Video Output'), category_id='comfy_engine'))
 
     from forge_h3.anima_backend import ATTENTION_CHOICES, ATTENTION_STABLE as ANIMA_STABLE
+    shared.opts.add_option('h3_image_attention', shared.OptionInfo(
+        ANIMA_STABLE, 'Image attention backend (H3 Image)', gr.Dropdown,
+        lambda: {'choices': list(ATTENTION_CHOICES)},
+        section=('comfy_image_output', 'Image Output'), category_id='comfy_engine'))
     shared.opts.add_option('anima_attention', shared.OptionInfo(
         ANIMA_STABLE, 'Image attention backend (ANIMA)', gr.Dropdown,
         lambda: {'choices': list(ATTENTION_CHOICES)},

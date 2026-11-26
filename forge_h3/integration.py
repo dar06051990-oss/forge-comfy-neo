@@ -350,7 +350,7 @@ def _hide_unverified_checkpoint_metadata(mp4_path):
             if temporary.exists():
                 temporary.unlink()
     except Exception as exc:
-        print(f'[MiniMax H3 Full Comfy] metadata display cleanup skipped: {exc}')
+        print(f'[Comfy Neo] metadata display cleanup skipped: {exc}')
 
 
 def adopt_comfy_video(source):
@@ -385,5 +385,5 @@ def adopt_comfy_video(source):
     _hide_unverified_checkpoint_metadata(dst)
     global _LAST_VIDEO
     _LAST_VIDEO=str(dst)
-    print(f"[MiniMax H3 Full Comfy] handed result to Forge: {dst}")
+    print(f"[Comfy Neo] handed result to Forge: {dst}")
     return str(dst)

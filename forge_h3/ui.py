@@ -152,7 +152,7 @@ class Panel:
             info = checkpoint_info(value)
             error = ""
             active = False
-            if info:
+            if info and preset_value != "h3_image":
                 try:
                     item = inspect_model(info.filename)
                     active = item is not None and item.role == "dit"
@@ -193,7 +193,7 @@ class Panel:
                 # On a switch from H3 to Comfy ANIMA, Forge's own ANIMA
                 # preset callback supplies native values. Restoring the old
                 # pre-H3 controls here can overwrite them with stale H3 values.
-                if preset_value == 'comfy_anima':
+                if preset_value in ('comfy_anima', 'h3_image') :
                     updates = [gr.update() for _ in native]
                 else:
                     updates = [gr.update(**config) for config in saved.get("native", [])]
@@ -221,9 +221,11 @@ class Panel:
 
         for event in (checkpoint.change, self.output.change, modules.change):
             event(update, inputs=inputs, outputs=outputs, queue=False, show_progress=False)
-        from .comfy_sampler_ui import normalized_scheduler, PIKA_SCHEDULE
+        from .comfy_sampler_ui import normalized_scheduler, PIKA_SCHEDULE, PH3_SCHEDULE
 
         def pika_controls(schedule, current_preset):
+            if current_preset == 'h3_image' and normalized_scheduler(schedule) == PH3_SCHEDULE:
+                return gr.update(value='er_sde'), gr.update(value=8), gr.update(value=1.0)
             if current_preset == 'h3' and normalized_scheduler(schedule) == PIKA_SCHEDULE:
                 return gr.update(value='lcm'), gr.update(value=6), gr.update(value=1.0)
             return gr.update(), gr.update(), gr.update()
@@ -246,10 +248,19 @@ class Panel:
                 payload = json.loads(media_json or '{}')
                 from .comfy_sampler_ui import resolve_forge_sampling
                 from modules import shared
-                engine = 'comfy_anima' if payload.get('engine') == 'anima' else 'h3'
+                engine = 'h3_image' if payload.get('engine') == 'h3_image' else 'comfy_anima' if payload.get('engine') == 'anima' else 'h3'
                 mode = 'i2i' if self.is_img2img else 't2i'
                 sampler, scheduler = resolve_forge_sampling(
                     sampler, scheduler, preset=engine, mode=mode, opts=shared.opts)
+                if engine == 'h3_image':
+                    if int(frames) != 1:
+                        raise ValueError('H3 Image: set Batch Size to 1.')
+                    from .h3_image_backend import generate as image_generate
+                    from .anima_backend import ATTENTION_STABLE
+                    img = image_generate(prompt, negative, width, height, steps, cfg, seed, ckpt, mods, sampler, scheduler, payload, self.is_img2img, getattr(shared.opts, 'h3_image_attention', ATTENTION_STABLE))
+                    if not img:
+                        return gr.update(value=None, visible=False), gr.update(value=None, visible=False), None, f'stopped|{time.time_ns()}'
+                    return gr.update(value=None, visible=False), gr.update(value=img, visible=True), img, f'done-image|{time.time_ns()}|{img}'
                 if payload.get('engine') == 'anima':
                     if int(frames) != 1:
                         raise ValueError('ANIMA currently supports Batch Size = 1. Set Batch Size to 1.')

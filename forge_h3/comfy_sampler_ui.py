@@ -17,6 +17,9 @@ PIKA_SCHEDULE = 'pika_h3_flex'
 PIKA_LABEL = 'Pika H3 Flex'
 PIKA_SIGMAS = '1.0, 0.972973, 0.923077, 0.8, 0.571429, 0.333333, 0.0'
 PIKA_STEPS = 6
+PH3_SCHEDULE = "p_h3_image"
+PH3_LABEL = "P-H3-Image"
+PH3_SIGMAS = "1.0, 0.984753, 0.967905, 0.951688, 0.925372, 0.881923, 0.810083, 0.528718, 0.0"
 
 
 def h3_choices(samplers, schedulers):
@@ -97,12 +100,14 @@ def resolve_forge_sampling(sampler, scheduler, *, preset, mode, opts):
     primary sampler/scheduler. Never pass these sentinels to KSampler, and
     never silently rewrite a genuinely unsupported concrete choice.
     """
-    if preset not in ('h3', 'comfy_anima') or mode not in ('t2i', 'i2i'):
+    if preset not in ('h3', 'comfy_anima', 'h3_image') or mode not in ('t2i', 'i2i'):
         raise ValueError('Unknown Comfy Neo preset or generation mode')
     supported_samplers, supported_schedulers = available_choices()
     if preset == 'h3':
         supported_samplers, supported_schedulers = h3_choices(supported_samplers, supported_schedulers)
-    default_sampler = 'er_sde' if preset == 'comfy_anima' else 'res_multistep'
+    if preset == 'h3_image':
+        supported_schedulers.append(PH3_SCHEDULE)
+    default_sampler = 'euler' if preset == 'h3_image' else 'er_sde' if preset == 'comfy_anima' else 'res_multistep'
     default_scheduler = 'beta' if preset == 'comfy_anima' else 'simple'
 
     def preset_value(field, default, normalizer, supported):
@@ -118,6 +123,10 @@ def resolve_forge_sampling(sampler, scheduler, *, preset, mode, opts):
     if normalized_scheduler(scheduler) == 'use_same_scheduler':
         scheduler = preset_value('scheduler', default_scheduler, normalized_scheduler, supported_schedulers)
         print(f'[Comfy Neo] Forge Hires scheduler sentinel resolved to {scheduler!r} ({preset}/{mode})')
+    if normalized_scheduler(scheduler) == PH3_SCHEDULE:
+        if preset != "h3_image":
+            raise ValueError("P-H3-Image is only available for MiniMax H3 Image.")
+        return "er_sde", PH3_SCHEDULE
     if normalized_scheduler(scheduler) == PIKA_SCHEDULE:
         if preset != 'h3':
             raise ValueError('Pika H3 Flex is only available for MiniMax H3.')
